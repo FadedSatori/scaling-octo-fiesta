@@ -1,6 +1,8 @@
 package ai.mlc.mlcchat.hermes.service
 
 import ai.mlc.mlcchat.hermes.agent.HermesAgentLoop
+import ai.mlc.mlcchat.hermes.inference.HermesConfig
+import ai.mlc.mlcchat.hermes.inference.InferenceProvider
 import ai.mlc.mlcchat.hermes.mcp.AppTool
 import ai.mlc.mlcchat.hermes.mcp.FsTool
 import ai.mlc.mlcchat.hermes.mcp.ShellTool
@@ -38,12 +40,17 @@ class HermesForegroundService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob())
     private var serverJob: Job? = null
+    private lateinit var inference: InferenceProvider
+    private lateinit var cfg: HermesConfig
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         startForeground(NOTIF_ID, buildNotification())
+
+        cfg = HermesConfig.load(this)
+        inference = InferenceProvider.fromConfig(this, cfg)
 
         val tools = ToolRegistry(mapOf(
             "fs" to FsTool(roots = listOf(
@@ -55,9 +62,7 @@ class HermesForegroundService : Service() {
             "app" to AppTool(),
         ))
 
-        // Inference is wired up by InferenceBridge in v0.1; for now we delegate
-        // to a stub that throws if called before the model is ready.
-        val agent = HermesAgentLoop(tools, infer = ::stubInfer)
+        val agent = HermesAgentLoop(tools, infer = inference::chat)
 
         serverJob = scope.launch {
             @Suppress("BlockingMethodInNonBlockingContext")
@@ -65,7 +70,12 @@ class HermesForegroundService : Service() {
                 install(ContentNegotiation) { json() }
                 routing {
                     get("/healthz") {
-                        call.respond(mapOf("ok" to true, "device" to "s24", "version" to "0.1.0"))
+                        call.respond(mapOf(
+                            "ok" to true,
+                            "device" to cfg.device,
+                            "version" to "0.1.0",
+                            "model" to cfg.modelId,
+                        ))
                     }
                     post("/agent/run") {
                         val req = call.receive<RunReq>()
@@ -98,9 +108,6 @@ class HermesForegroundService : Service() {
             .setOngoing(true)
             .build()
     }
-
-    private suspend fun stubInfer(messages: List<HermesAgentLoop.Message>): String =
-        error("inference bridge not yet wired up; v0.1 in progress")
 
     companion object {
         private const val CHANNEL = "hermes-fgs"

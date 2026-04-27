@@ -48,12 +48,25 @@ Add inside `<application>`:
 Add to `dependencies`:
 
 ```kotlin
+// Hermes inference bridge depends on the mlc4j module from the upstream
+// MLC LLM repo. The MLC Chat sample app already includes it as a project
+// dependency; we just rely on that. If you've moved mlc4j elsewhere, swap
+// this for the appropriate `implementation(project(":..."))` reference.
+implementation(project(":mlc4j"))
+
+// Shizuku for ADB-level privileges without root.
 implementation("dev.rikka.shizuku:api:13.1.5")
 implementation("dev.rikka.shizuku:provider:13.1.5")
+
+// Ktor server (HermesForegroundService) + client (RemoteChatBackend).
 implementation("io.ktor:ktor-server-core:2.3.12")
 implementation("io.ktor:ktor-server-netty:2.3.12")
 implementation("io.ktor:ktor-server-content-negotiation:2.3.12")
+implementation("io.ktor:ktor-client-core:2.3.12")
+implementation("io.ktor:ktor-client-cio:2.3.12")
+implementation("io.ktor:ktor-client-content-negotiation:2.3.12")
 implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.12")
+
 implementation("androidx.work:work-runtime-ktx:2.9.1")
 ```
 

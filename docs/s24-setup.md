@@ -63,10 +63,30 @@ cd mlc-chat/android/MLCChat
 
 ## Inference bridge
 
-Wiring MLC's `MLCEngine` into `HermesAgentLoop.infer` is left as the v0.1
-TODO — see `service/HermesForegroundService.kt:stubInfer`. The MLC Chat
-upstream code already exposes a Kotlin `MLCEngine.chat(messages)` that we
-wrap.
+Wired up via:
+
+- `inference/ChatBackend.kt` — interface (`isAvailable`, `chat`).
+- `inference/MlcChatBackend.kt` — wraps `ai.mlc.mlcllm.MLCEngine`. Loads
+  the model lazily under a mutex (one-time reload), then streams completion
+  chunks and concatenates them so the parser sees a complete response.
+- `inference/RemoteChatBackend.kt` — POSTs to a laptop daemon's
+  `/mcp/inference/chat` over Tailscale. Inactive in v0.1 (empty
+  `remoteUrl`).
+- `inference/InferenceProvider.kt` — picks an order (remote-first when
+  context exceeds threshold and configured, otherwise local-first), falls
+  through on failure.
+- `inference/HermesConfig.kt` — JSON config persisted under filesDir.
+  Defaults to `Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC` with model lib
+  `qwen2_q4f16_1`. The first-run wizard's "Verify model" step writes
+  the unpacked path here.
+
+`HermesForegroundService` constructs an `InferenceProvider` from the
+loaded config and passes `provider::chat` as the agent's `infer` lambda.
+No more stub.
+
+If the MLC SDK API shifts in a future upstream pin, `MlcChatBackend` is
+the only file to update (the `asText()` adapter at the bottom isolates
+the delta-content shape).
 
 ## Tool-call rendering in the chat UI
 
