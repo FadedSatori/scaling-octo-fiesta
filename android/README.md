@@ -3,41 +3,42 @@
 The S24 client is a fork of [MLC Chat Android](https://github.com/mlc-ai/mlc-llm/tree/main/android/MLCChat)
 with a Hermes overlay that adds:
 
-- A **foreground service** hosting a Ktor HTTP server on `127.0.0.1:8765` that
-  speaks the same MCP-style endpoints as the laptop daemon.
-- **Shizuku-backed tools** for filesystem, shell, UI automation, and screen
-  capture — ADB-level privileges with no root.
+- A **launcher activity** (`HermesActivity`) showing a setup wizard +
+  chat surface. MLC Chat's existing UI stays accessible for model
+  management.
+- A **foreground service** hosting a Ktor HTTP server on `127.0.0.1:8765`.
+- **Shizuku-backed tools** for filesystem, shell, UI automation, and
+  app launches — ADB-level privileges with no root.
 - A **Hermes-2-Pro tool-call agent loop** that drives the bundled
   Qwen2.5-Coder 3B (Q4f16_1) model.
-- A **first-run wizard** for Tailscale + Shizuku setup, battery-opt opt-out,
-  model verification, and mesh registration.
+- An **MLC inference bridge** (`MlcChatBackend`) plus a **remote chat
+  backend** stub for v0.2 mesh dispatch.
 
-This directory contains only the overlay — the MLC Chat fork itself is
-cloned alongside it at build time.
+This directory contains only the overlay — the MLC Chat fork is cloned
+alongside it at build time by `apply-overlay.sh`.
 
-## Build
+## Build (one-liner)
 
 ```bash
-# 1) Clone MLC Chat as the app base
 cd android
-git clone --depth 1 https://github.com/mlc-ai/mlc-llm.git mlc-chat
-cp -R overlay/* mlc-chat/android/MLCChat/
-
-# 2) Apply the manifest + gradle merges (see overlay/MERGES.md for diffs)
-#    or run the helper script (Linux/macOS):
-./apply-overlay.sh
-
-# 3) Build
+./apply-overlay.sh                  # clone MLC Chat + apply overlay
 cd mlc-chat/android/MLCChat
-./gradlew assembleRelease
-# APK at: app/build/outputs/apk/release/app-release.apk
+./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+`./apply-overlay.sh --rebuild` also runs `gradle assembleDebug` after
+applying.
+
+Requirements: JDK 17, Android SDK + NDK (MLC's native libs), Python 3
+(used by the manifest/gradle patcher).
 
 ## Bundled model
 
-Qwen2.5-Coder 3B Q4f16_1 (~2GB) is fetched at build time via MLC's standard
-`prepare_libs.sh` flow. See MLC docs for cross-compilation instructions if
-you want to swap in a different quantization.
+The default config points at `Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC` with
+model lib `qwen2_q4f16_1`. MLC Chat's existing model-manager flow handles
+download + unpacking under `filesDir/models/`. The wizard's "Verify
+model" step confirms the directory exists.
 
 ## Layout (overlay only)
 
@@ -46,16 +47,27 @@ overlay/
   app/
     src/main/
       kotlin/ai/mlc/mlcchat/hermes/
+        HermesActivity.kt                    launcher (Compose UI host)
+        agent/HermesAgentLoop.kt             Hermes-2-Pro tool-call loop
+        agent/HermesParser.kt                tool-call XML/JSON parser
+        inference/ChatBackend.kt             pluggable interface
+        inference/MlcChatBackend.kt          local MLC LLM
+        inference/RemoteChatBackend.kt       Tailscale dispatch (v0.2)
+        inference/InferenceProvider.kt       backend chooser
+        inference/HermesConfig.kt            per-device JSON config
+        mcp/Tools.kt                         fs / shell / ui / app tools
         service/HermesForegroundService.kt   FGS + Ktor HTTP server
+        service/BootReceiver.kt              re-arm FGS after reboot
         shizuku/ShizukuClient.kt             permission + privileged exec
-        agent/HermesAgentLoop.kt             tool-call loop
-        agent/HermesParser.kt                Hermes-2-Pro parser
-        mcp/Tools.kt                         fs / shell / ui / screen tools
-        wizard/FirstRunWizard.kt             setup flow
+        ui/HermesScreen.kt                   wizard + chat Composable
+        ui/HermesClient.kt                   in-process client → 8765
+        ui/HermesPrefs.kt                    wizard-complete flag
+        wizard/FirstRunWizard.kt             setup steps (data only)
       res/values/
         strings_hermes.xml
-  MERGES.md                                  AndroidManifest.xml + build.gradle deltas
+  MERGES.md                                  manifest + gradle deltas (manual)
+apply-overlay.sh                             clone + auto-merge script
 ```
 
-See [`../scripts/bootstrap-android.md`](../scripts/bootstrap-android.md) for
-end-user sideload + first-run steps.
+See [`../scripts/bootstrap-android.md`](../scripts/bootstrap-android.md)
+for end-user sideload + first-run steps once the APK is built.

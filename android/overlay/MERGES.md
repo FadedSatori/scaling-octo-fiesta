@@ -1,5 +1,9 @@
 # Manifest + Gradle merges to apply on top of MLC Chat
 
+`apply-overlay.sh` performs these merges automatically against the pinned
+MLC Chat commit. The notes below are for manual application or for
+verifying the patch when MLC Chat changes shape.
+
 ## `app/src/main/AndroidManifest.xml`
 
 Add inside `<manifest>`:
@@ -17,9 +21,22 @@ Add inside `<manifest>`:
 </queries>
 ```
 
-Add inside `<application>`:
+Inside `<application>`, **remove** the `<intent-filter>` containing
+`android.intent.action.MAIN` from MLC Chat's existing `MainActivity` so
+Hermes becomes the launcher, then add:
 
 ```xml
+<activity
+    android:name="ai.mlc.mlcchat.hermes.HermesActivity"
+    android:exported="true"
+    android:label="@string/hermes_app_name"
+    android:launchMode="singleTask">
+    <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+    </intent-filter>
+</activity>
+
 <service
     android:name="ai.mlc.mlcchat.hermes.service.HermesForegroundService"
     android:exported="false"
@@ -58,14 +75,19 @@ implementation(project(":mlc4j"))
 implementation("dev.rikka.shizuku:api:13.1.5")
 implementation("dev.rikka.shizuku:provider:13.1.5")
 
-// Ktor server (HermesForegroundService) + client (RemoteChatBackend).
+// Ktor server (HermesForegroundService) + client (RemoteChatBackend, HermesClient).
+// CIO engine is used on Android — Netty pulls in JVM-only deps.
 implementation("io.ktor:ktor-server-core:2.3.12")
-implementation("io.ktor:ktor-server-netty:2.3.12")
+implementation("io.ktor:ktor-server-cio:2.3.12")
 implementation("io.ktor:ktor-server-content-negotiation:2.3.12")
 implementation("io.ktor:ktor-client-core:2.3.12")
 implementation("io.ktor:ktor-client-cio:2.3.12")
 implementation("io.ktor:ktor-client-content-negotiation:2.3.12")
 implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.12")
+
+// Compose UI for HermesActivity.
+implementation("androidx.activity:activity-compose:1.9.2")
+implementation("androidx.compose.material3:material3:1.3.0")
 
 implementation("androidx.work:work-runtime-ktx:2.9.1")
 ```

@@ -17,8 +17,8 @@ import android.os.Environment
 import android.os.IBinder
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
+import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
-import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -66,7 +66,7 @@ class HermesForegroundService : Service() {
 
         serverJob = scope.launch {
             @Suppress("BlockingMethodInNonBlockingContext")
-            embeddedServer(Netty, port = 8765, host = "127.0.0.1") {
+            embeddedServer(CIO, port = 8765, host = "127.0.0.1") {
                 install(ContentNegotiation) { json() }
                 routing {
                     get("/healthz") {

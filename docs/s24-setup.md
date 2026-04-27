@@ -10,14 +10,18 @@ is the developer view.
 ┌────────────────────────────────────────────────────┐
 │ Hermes Android app (forked from MLC Chat)          │
 │                                                    │
-│  ┌──────────────┐    ┌─────────────────────────┐   │
-│  │ MLC LLM      │    │ HermesForegroundService │   │
-│  │ Qwen2.5-Coder│◀──▶│  Ktor on 127.0.0.1:8765 │   │
-│  │ 3B Q4f16_1   │    │  /healthz, /agent/run   │   │
-│  └──────────────┘    └────────────┬────────────┘   │
-│                                   │                │
-│                                   ▼                │
-│  ┌──────────────────────────────────────────────┐  │
+│  HermesActivity (launcher) ─ Compose: wizard+chat  │
+│      │                                             │
+│      │ POST /agent/run        ▲ on app open        │
+│      ▼                        │ startForegroundSvc │
+│  ┌──────────────┐    ┌─────────┴─────────────────┐ │
+│  │ MLC LLM      │    │ HermesForegroundService   │ │
+│  │ Qwen2.5-Coder│◀──▶│ Ktor on 127.0.0.1:8765    │ │
+│  │ 3B Q4f16_1   │    │ /healthz, /agent/run      │ │
+│  └──────────────┘    └────────────┬──────────────┘ │
+│         ▲                         │                │
+│         │ MlcChatBackend          ▼                │
+│  ┌──────┴───────────────────────────────────────┐  │
 │  │ HermesAgentLoop (tool-call loop)             │  │
 │  └──────────────┬───────────────────────────────┘  │
 │                 │                                  │
@@ -34,12 +38,17 @@ is the developer view.
 
 ```bash
 cd android
-git clone --depth 1 https://github.com/mlc-ai/mlc-llm.git mlc-chat
-cp -R overlay/* mlc-chat/android/MLCChat/
-# Apply manifest + gradle merges from overlay/MERGES.md
+./apply-overlay.sh                  # clones MLC Chat at the pinned commit and merges overlay
 cd mlc-chat/android/MLCChat
-./gradlew assembleRelease
+./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+`apply-overlay.sh` is idempotent — re-running re-syncs sources but won't
+re-clone. Pass `--rebuild` to also run `assembleDebug` at the end.
+
+Requirements: JDK 17, Android SDK + NDK (MLC's native libs), Python 3
+(used by the manifest/gradle patcher).
 
 ## Why MLC Chat as base
 
