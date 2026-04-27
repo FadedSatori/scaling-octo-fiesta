@@ -1,0 +1,17 @@
+# Hermes daemon config — rendered by scripts/bootstrap-windows.ps1.
+# Tokens between {{double braces}} are replaced at install time.
+
+device: "{{device}}"          # g14 | lenovo | s24
+bind_host: "0.0.0.0"          # listens on Tailscale interface
+bind_port: 8765
+
+nats_url:   "nats://{{nats_host}}:4222"
+ollama_url: "http://127.0.0.1:11434"
+
+agent_model: "hermes3:8b"
+coder_model: "{{coder_model}}"
+
+# Filesystem MCP allowlist. Anything outside these roots is rejected.
+fs_roots:
+  - "C:/Users/${env:USERNAME}/Documents/hermes"
+  - "C:/Users/${env:USERNAME}/Projects"

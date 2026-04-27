@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hermes_app_name">Hermes</string>
+    <string name="hermes_fgs_channel">Hermes background service</string>
+    <string name="hermes_fgs_running_title">Hermes is running</string>
+    <string name="hermes_fgs_running_text">Local agent + MCP server</string>
+
+    <string name="wizard_title">Set up Hermes</string>
+    <string name="wizard_install_tailscale">Install Tailscale</string>
+    <string name="wizard_install_shizuku">Install Shizuku</string>
+    <string name="wizard_grant_shizuku">Grant Shizuku permission</string>
+    <string name="wizard_battery_opt">Disable battery optimization</string>
+    <string name="wizard_verify_model">Verify Qwen2.5-Coder 3B</string>
+</resources>

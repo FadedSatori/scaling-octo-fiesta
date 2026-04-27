@@ -1,0 +1,21 @@
+{
+  "tagOwners": {
+    "tag:hermes": ["autogroup:admin"]
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["tag:hermes"],
+      "dst": ["tag:hermes:8765,4222,11434,6333"]
+    }
+  ],
+  "ssh": [
+    {
+      "action": "accept",
+      "src": ["tag:hermes"],
+      "dst": ["tag:hermes"],
+      "users": ["autogroup:nonroot"]
+    }
+  ],
+  "_comment": "Ports: 8765 Hermes daemon, 4222 NATS, 11434 Ollama, 6333 Qdrant. Tag every Hermes node with tag:hermes."
+}

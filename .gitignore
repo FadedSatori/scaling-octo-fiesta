@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Android
+android/mlc-chat/
+android/local.properties
+*.apk
+*.keystore
+*.jks
+.gradle/
+
+# Models / weights (never commit)
+*.gguf
+*.safetensors
+*.bin
+*.mlc/
+mlc_weights/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Local config with secrets
+configs/daemon.yml
+configs/tailscale-acl.json
+configs/*.local.*
