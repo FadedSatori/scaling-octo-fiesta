@@ -13,5 +13,5 @@ coder_model: "{{coder_model}}"
 
 # Filesystem MCP allowlist. Anything outside these roots is rejected.
 fs_roots:
-  - "C:/Users/${env:USERNAME}/Documents/hermes"
-  - "C:/Users/${env:USERNAME}/Projects"
+  - "C:/Users/{{username}}/Documents/hermes"
+  - "C:/Users/{{username}}/Projects"

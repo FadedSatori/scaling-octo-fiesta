@@ -18,6 +18,7 @@ import android.os.IBinder
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
+import io.ktor.server.engine.ApplicationEngine
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.request.receive
@@ -26,10 +27,8 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
 /**
@@ -39,7 +38,7 @@ import kotlinx.serialization.Serializable
 class HermesForegroundService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob())
-    private var serverJob: Job? = null
+    private var engine: ApplicationEngine? = null
     private lateinit var inference: InferenceProvider
     private lateinit var cfg: HermesConfig
 
@@ -64,31 +63,29 @@ class HermesForegroundService : Service() {
 
         val agent = HermesAgentLoop(tools, infer = inference::chat)
 
-        serverJob = scope.launch {
-            @Suppress("BlockingMethodInNonBlockingContext")
-            embeddedServer(CIO, port = 8765, host = "127.0.0.1") {
-                install(ContentNegotiation) { json() }
-                routing {
-                    get("/healthz") {
-                        call.respond(mapOf(
-                            "ok" to true,
-                            "device" to cfg.device,
-                            "version" to "0.1.0",
-                            "model" to cfg.modelId,
-                        ))
-                    }
-                    post("/agent/run") {
-                        val req = call.receive<RunReq>()
-                        val r = agent.run(req.prompt, req.maxSteps)
-                        call.respond(RunResp(r.final, r.steps))
-                    }
+        engine = embeddedServer(CIO, port = 8765, host = "127.0.0.1") {
+            install(ContentNegotiation) { json() }
+            routing {
+                get("/healthz") {
+                    call.respond(mapOf(
+                        "ok" to true,
+                        "device" to cfg.device,
+                        "version" to "0.1.0",
+                        "model" to cfg.modelId,
+                    ))
                 }
-            }.start(wait = true)
-        }
+                post("/agent/run") {
+                    val req = call.receive<RunReq>()
+                    val r = agent.run(req.prompt, req.maxSteps)
+                    call.respond(RunResp(r.final, r.steps))
+                }
+            }
+        }.also { it.start(wait = false) }
     }
 
     override fun onDestroy() {
-        serverJob?.cancel()
+        engine?.stop(gracePeriodMillis = 1_000, timeoutMillis = 2_000)
+        engine = null
         scope.cancel()
         super.onDestroy()
     }

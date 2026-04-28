@@ -24,8 +24,9 @@ A self-hosted alternative to Claude Code:
 
 **Windows (Lenovo / G14)**
 ```powershell
-irm https://raw.githubusercontent.com/<you>/scaling-octo-fiesta/main/scripts/bootstrap-windows.ps1 | iex
+irm https://raw.githubusercontent.com/fadedsatori/scaling-octo-fiesta/main/scripts/bootstrap-windows.ps1 | iex
 ```
+If you've forked the repo, swap `fadedsatori` for your GitHub username.
 
 **S24** — see [`scripts/bootstrap-android.md`](scripts/bootstrap-android.md).
 The APK is sideloaded; the in-app first-run wizard handles Tailscale, Shizuku
