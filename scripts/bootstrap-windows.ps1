@@ -20,7 +20,7 @@
   Where to clone the repo and place the venv. Default: %LOCALAPPDATA%\Hermes.
 
 .EXAMPLE
-  irm https://raw.githubusercontent.com/<you>/scaling-octo-fiesta/main/scripts/bootstrap-windows.ps1 | iex
+  irm https://raw.githubusercontent.com/fadedsatori/scaling-octo-fiesta/main/scripts/bootstrap-windows.ps1 | iex
 #>
 
 [CmdletBinding()]
@@ -213,7 +213,8 @@ $natsHost = if ($DeviceRole -eq 'g14') { '127.0.0.1' } else { 'g14.hermes-net' }
 $rendered = $tpl `
     -replace '\{\{device\}\}',     $DeviceRole `
     -replace '\{\{coder_model\}\}', $coderModel `
-    -replace '\{\{nats_host\}\}',  $natsHost
+    -replace '\{\{nats_host\}\}',  $natsHost `
+    -replace '\{\{username\}\}',   $env:USERNAME
 Set-Content -Path $cfgOut -Value $rendered -Encoding UTF8
 Write-Ok "Config: $cfgOut"
 

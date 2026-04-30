@@ -1,5 +1,6 @@
 package ai.mlc.mlcchat.hermes.wizard
 
+import ai.mlc.mlcchat.hermes.inference.HermesConfig
 import ai.mlc.mlcchat.hermes.shizuku.ShizukuClient
 import android.content.Context
 import android.content.Intent
@@ -61,7 +62,7 @@ object VerifyModel : WizardStep {
     override val title = "Verify Qwen2.5-Coder 3B"
     override val description = "Checks the bundled MLC weights unpacked correctly."
     override fun isComplete(ctx: Context): Boolean {
-        val dir = java.io.File(ctx.filesDir, "models/qwen2.5-coder-3b-q4f16_1")
+        val dir = HermesConfig.load(ctx).modelAbsolutePath(ctx)
         return dir.exists() && (dir.listFiles()?.isNotEmpty() ?: false)
     }
     override fun start(ctx: Context) { /* triggered by MLC's own model manager */ }

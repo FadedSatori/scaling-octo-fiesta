@@ -103,7 +103,7 @@ class AgentLoop:
                 result = await self._dispatch(call)
                 rendered = render_tool_response(call.name, result)
                 transcript.append({"role": "tool", "name": call.name, "content": result})
-                messages.append({"role": "tool", "content": rendered})
+                messages.append({"role": "tool", "name": call.name, "content": rendered})
 
             if parsed.final is not None:
                 return RunResponse(final=parsed.final, steps=step + 1, transcript=transcript)
