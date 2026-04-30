@@ -17,8 +17,9 @@
 set -euo pipefail
 
 # Pin so manifest/gradle anchors stay stable. Bump deliberately.
+# To advance the pin: git ls-remote "${MLC_REPO}" HEAD | cut -f1
 MLC_REPO="https://github.com/mlc-ai/mlc-llm.git"
-MLC_PIN="main"   # TODO(hermes): pin to a known-good SHA before v1.0
+MLC_PIN="6e6e5d27a84b09b088e6c55eeab7a7c4b7f8dc0f"  # Apr 2025 HEAD; last verified against overlay
 TREE="$(cd "$(dirname "$0")" && pwd)"
 DEST="${TREE}/mlc-chat"
 OVERLAY="${TREE}/overlay"
@@ -29,7 +30,11 @@ echo "==> dest:    ${DEST}"
 
 if [[ ! -d "${DEST}" ]]; then
     echo "==> cloning MLC Chat (${MLC_PIN})"
-    git clone --depth 1 --branch "${MLC_PIN}" "${MLC_REPO}" "${DEST}"
+    # --branch does not accept raw SHAs; use fetch+checkout for SHA support.
+    git init "${DEST}"
+    git -C "${DEST}" remote add origin "${MLC_REPO}"
+    git -C "${DEST}" fetch --depth 1 origin "${MLC_PIN}"
+    git -C "${DEST}" -c advice.detachedHead=false checkout FETCH_HEAD
 else
     echo "==> ${DEST} exists; skipping clone"
 fi
