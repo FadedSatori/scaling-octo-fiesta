@@ -11,4 +11,5 @@
     <string name="wizard_grant_shizuku">Grant Shizuku permission</string>
     <string name="wizard_battery_opt">Disable battery optimization</string>
     <string name="wizard_verify_model">Verify Qwen2.5-Coder 3B</string>
+    <string name="wizard_configure_remote">Connect to G14 (optional)</string>
 </resources>
