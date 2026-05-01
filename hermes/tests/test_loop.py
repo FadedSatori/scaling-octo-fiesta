@@ -35,6 +35,19 @@ class _BrokenTool:
         raise ValueError("tool always fails")
 
 
+def _make_model_spy(responses: list[str]) -> tuple[AgentLoop, list[str]]:
+    """Return a loop whose inference records every model name passed to chat()."""
+    inf = _FakeInference(responses)
+    loop = AgentLoop(inference=inf, tools={})
+    seen: list[str] = []
+    _orig = inf.chat
+    async def _spy(*, model: str, messages: list[dict]) -> str:
+        seen.append(model)
+        return await _orig(model=model, messages=messages)
+    inf.chat = _spy  # type: ignore[method-assign]
+    return loop, seen
+
+
 def _make_loop(responses: list[str], tools: dict | None = None) -> AgentLoop:
     if tools is None:
         tools = {"echo": _EchoTool()}
@@ -148,6 +161,16 @@ class TestAgentLoop:
         loop = _make_loop(["<final>ok</final>"], tools={})
         resp = await loop.run(RunRequest(prompt="hi"))
         assert resp.final == "ok"
+
+    async def test_model_override_passed_to_inference(self):
+        loop, seen = _make_model_spy(["<final>ok</final>"])
+        await loop.run(RunRequest(prompt="hi", model="custom-model:7b"))
+        assert seen == ["custom-model:7b"]
+
+    async def test_default_model_used_when_not_overridden(self):
+        loop, seen = _make_model_spy(["<final>ok</final>"])
+        await loop.run(RunRequest(prompt="hi"))
+        assert seen == ["fake-model"]
 
     async def test_multiple_tool_calls_in_one_step(self):
         loop = _make_loop([

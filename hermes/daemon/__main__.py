@@ -75,6 +75,16 @@ def build_app(cfg: DaemonConfig) -> FastAPI:
     return app
 
 
+def _log_router_done(task: asyncio.Task) -> None:
+    """Callback so a router crash is visible in logs rather than silently lost."""
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        log.critical("NATS router exited unexpectedly: %s: %s",
+                     type(exc).__name__, exc, exc_info=exc)
+
+
 async def run_router(cfg: DaemonConfig, app: FastAPI) -> None:
     router = NatsRouter(url=cfg.nats_url, device=cfg.device, agent=app.state.agent, cfg=cfg)
     await router.connect()
@@ -101,6 +111,7 @@ def main() -> int:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     router_task = loop.create_task(run_router(cfg, app))
+    router_task.add_done_callback(_log_router_done)
 
     config = uvicorn.Config(
         app,
@@ -127,6 +138,9 @@ def main() -> int:
         loop.run_until_complete(server.serve())
     finally:
         router_task.cancel()
+        # Give the router task a chance to clean up before closing the loop.
+        loop.run_until_complete(asyncio.gather(router_task, return_exceptions=True))
+        loop.run_until_complete(app.state.inference.aclose())
         loop.close()
     return 0
 

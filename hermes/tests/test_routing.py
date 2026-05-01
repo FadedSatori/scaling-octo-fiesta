@@ -27,7 +27,7 @@ def _make_msg(data: dict) -> MagicMock:
 class TestOnConfigChanged:
     async def test_no_cfg_logs_warning_and_returns(self, caplog):
         router = _make_router(cfg=None)
-        with pytest.raises(Exception) if False else patch("hermes.routing.log") as log:
+        with patch("hermes.routing.log") as log:
             await router._on_config_changed(_make_msg({"by": "test"}))
             log.warning.assert_called_once()
             assert "no cfg" in log.warning.call_args[0][0]

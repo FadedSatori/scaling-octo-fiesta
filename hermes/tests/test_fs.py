@@ -41,9 +41,10 @@ class TestFsRead:
             await fs.call("read", {"path": str(link / "passwd")})
         assert exc.value.status_code == 403
 
-    async def test_read_nonexistent_file_raises(self, fs: FsServer, tmp_root: Path):
-        with pytest.raises(Exception):
+    async def test_read_nonexistent_file_raises_404(self, fs: FsServer, tmp_root: Path):
+        with pytest.raises(HTTPException) as exc:
             await fs.call("read", {"path": str(tmp_root / "nope.txt")})
+        assert exc.value.status_code == 404
 
     async def test_read_no_roots_configured(self, tmp_root: Path):
         empty_fs = FsServer(roots=[])
@@ -98,6 +99,11 @@ class TestFsList:
     async def test_list_outside_root_rejected(self, fs: FsServer):
         with pytest.raises(HTTPException):
             await fs.call("list", {"path": "/etc"})
+
+    async def test_list_nonexistent_raises_404(self, fs: FsServer, tmp_root: Path):
+        with pytest.raises(HTTPException) as exc:
+            await fs.call("list", {"path": str(tmp_root / "ghost_dir")})
+        assert exc.value.status_code == 404
 
 
 @pytest.mark.asyncio

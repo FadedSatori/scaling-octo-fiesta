@@ -44,6 +44,7 @@ opening user message; only call ops listed there.
 class RunRequest(BaseModel):
     prompt: str
     max_steps: int = 8
+    model: str | None = None  # overrides agent_model from config when set
 
 
 class RunResponse(BaseModel):
@@ -56,8 +57,10 @@ class AgentLoop:
     def __init__(self, *, inference: InferenceLike, tools: dict[str, ToolLike]) -> None:
         self.inference = inference
         self.tools = tools
+        # Precomputed once — system prompt and tool manifest are fixed at init.
+        self._system_msg = SYSTEM_PROMPT + "\n\n" + self._build_tool_manifest()
 
-    def _tool_manifest(self) -> str:
+    def _build_tool_manifest(self) -> str:
         lines = ["Tools:"]
         for ns, tool in self.tools.items():
             ops = getattr(tool, "ops", None)
@@ -76,21 +79,20 @@ class AgentLoop:
             return f"error: no such tool namespace '{ns}'"
         try:
             return await tool.call(op, call.arguments)
-        except Exception as exc:  # noqa: BLE001 — surface to the model
+        except Exception as exc:  # noqa: BLE001 — surface error text to the model
             log.exception("tool dispatch failed: %s", call.name)
             return f"error: {type(exc).__name__}: {exc}"
 
     async def run(self, req: RunRequest) -> RunResponse:
+        model = req.model or self.inference.agent_model
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": SYSTEM_PROMPT + "\n\n" + self._tool_manifest()},
+            {"role": "system", "content": self._system_msg},
             {"role": "user", "content": req.prompt},
         ]
         transcript: list[dict[str, Any]] = []
 
         for step in range(req.max_steps):
-            text = await self.inference.chat(
-                model=self.inference.agent_model, messages=messages
-            )
+            text = await self.inference.chat(model=model, messages=messages)
             transcript.append({"role": "assistant", "content": text})
             parsed: ParseResult = parse(text)
 

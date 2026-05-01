@@ -46,7 +46,10 @@ class FsServer:
         if op == "read":
             req = ReadReq.model_validate(args)
             path = self._resolve(req.path)
-            data = path.read_bytes()[: req.max_bytes]
+            try:
+                data = path.read_bytes()[: req.max_bytes]
+            except FileNotFoundError:
+                raise HTTPException(404, f"path '{req.path}' not found")
             return data.decode("utf-8", errors="replace")
         if op == "write":
             req = WriteReq.model_validate(args)
@@ -58,11 +61,13 @@ class FsServer:
         if op == "list":
             req = ListReq.model_validate(args)
             path = self._resolve(req.path)
-            entries = []
-            for child in sorted(path.iterdir()):
-                kind = "d" if child.is_dir() else "f"
-                entries.append(f"{kind} {child.name}")
-            return "\n".join(entries)
+            try:
+                entries = sorted(path.iterdir())
+            except FileNotFoundError:
+                raise HTTPException(404, f"path '{req.path}' not found")
+            return "\n".join(
+                f"{'d' if child.is_dir() else 'f'} {child.name}" for child in entries
+            )
         raise HTTPException(400, f"unknown op '{op}'")
 
     def mount(self, app: FastAPI, *, prefix: str) -> None:
