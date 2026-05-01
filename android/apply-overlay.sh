@@ -168,6 +168,10 @@ DEPS = """
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.compose.material3:material3:1.3.0")
+    // JVM unit tests — run via ./gradlew test, no emulator needed
+    testImplementation("org.jetbrains.kotlin:kotlin-test")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 """
 
 src = re.sub(
