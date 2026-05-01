@@ -176,6 +176,28 @@ src = re.sub(
     src, count=1,
 )
 
+# Patch minSdk to 30+ — Shizuku wireless ADB pairing requires Android 11+.
+# Three cases: existing minSdk line below 30, no minSdk at all, no
+# defaultConfig block (warns but does not abort the build).
+def _patch_min_sdk(s):
+    def _raise_value(m):
+        return m.group(0).replace(m.group(1), '30') if int(m.group(1)) < 30 else m.group(0)
+
+    patched, n = re.subn(r'minSdk\s*=\s*(\d+)', _raise_value, s, count=1)
+    if n:
+        return patched
+    patched, n = re.subn(
+        r'(defaultConfig\s*\{)',
+        r'\1\n        minSdk = 30  // Hermes: Shizuku requires Android 11+',
+        s, count=1,
+    )
+    if n:
+        return patched
+    print('WARNING: could not patch minSdk — defaultConfig block not found', file=sys.stderr)
+    return s
+
+src = _patch_min_sdk(src)
+
 open(path, 'w').write(src)
 print('gradle patched')
 PY
