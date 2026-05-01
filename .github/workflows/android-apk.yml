@@ -1,0 +1,78 @@
+name: Build Hermes Android APK
+
+on:
+  push:
+    branches: ["main"]
+    paths: ["android/**"]
+  pull_request:
+    paths: ["android/**"]
+  workflow_dispatch:   # manual trigger from GitHub UI
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      JAVA_VERSION: "17"
+      # Keep in sync with MLC_PIN in android/apply-overlay.sh.
+      # Bump both together when advancing the MLC LLM pin.
+      MLC_PIN: "6e6e5d27a84b09b088e6c55eeab7a7c4b7f8dc0f"
+
+    steps:
+      - name: Checkout Hermes overlay
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache MLC LLM clone
+        id: cache-mlc
+        uses: actions/cache@v4
+        with:
+          path: android/mlc-chat
+          # Key includes the pinned SHA so a deliberate pin bump forces a fresh clone.
+          key: mlc-${{ env.MLC_PIN }}
+
+      - name: Apply Hermes overlay (clone + patch manifest + gradle)
+        run: |
+          cd android
+          ./apply-overlay.sh
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('android/mlc-chat/android/MLCChat/**/*.gradle.kts', 'android/mlc-chat/android/MLCChat/gradle/libs.versions.toml') }}
+          restore-keys: gradle-
+
+      - name: Run JVM unit tests
+        working-directory: android/mlc-chat/android/MLCChat
+        run: ./gradlew test --no-daemon
+
+      - name: Build debug APK
+        working-directory: android/mlc-chat/android/MLCChat
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-debug-apk
+          path: android/mlc-chat/android/MLCChat/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: android/mlc-chat/android/MLCChat/app/build/reports/tests/
+          retention-days: 7

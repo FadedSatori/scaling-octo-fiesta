@@ -1,0 +1,32 @@
+# Qdrant vector store for the Hermes G14 node.
+#
+# Start:   docker compose -f docker-compose.qdrant.yml up -d
+# Stop:    docker compose -f docker-compose.qdrant.yml down
+# Logs:    docker logs hermes-qdrant -f
+#
+# Data is persisted to C:\ProgramData\Hermes\qdrant-storage (bind mount).
+# Port 6333 is exposed on all interfaces; Tailscale ACL (tailscale-acl.example.json)
+# restricts access to tag:hermes devices — no additional firewall rule needed.
+
+version: "3.9"
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.9.2   # pin; bump deliberately
+    container_name: hermes-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST / gRPC API
+      - "6334:6334"   # gRPC (alternate)
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__ENABLE_TLS: "false"   # Tailscale WireGuard is the TLS layer
+
+volumes:
+  qdrant_storage:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: C:\ProgramData\Hermes\qdrant-storage

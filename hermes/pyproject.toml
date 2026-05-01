@@ -21,7 +21,8 @@ dependencies = [
 dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10"]
 
 [project.scripts]
-hermes = "hermes.daemon.__main__:main"
+hermes      = "hermes.daemon.__main__:main"
+hermes-eval = "hermes.eval.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["hermes*"]

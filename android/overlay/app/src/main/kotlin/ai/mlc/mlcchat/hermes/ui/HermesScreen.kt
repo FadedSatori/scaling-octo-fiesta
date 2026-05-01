@@ -1,6 +1,8 @@
 package ai.mlc.mlcchat.hermes.ui
 
+import ai.mlc.mlcchat.hermes.inference.HermesConfig
 import ai.mlc.mlcchat.hermes.shizuku.ShizukuClient
+import ai.mlc.mlcchat.hermes.wizard.ConfigureRemote
 import ai.mlc.mlcchat.hermes.wizard.WIZARD_STEPS
 import ai.mlc.mlcchat.hermes.wizard.WizardStep
 import androidx.compose.foundation.layout.*
@@ -82,7 +84,10 @@ fun HermesScreen(prefs: HermesPrefs, client: HermesClient) {
                                     stepStates[it.title] = it.isComplete(ctx)
                                 }
                             }) { Text("Re-check") }
-                            val allDone = WIZARD_STEPS.all { stepStates[it.title] == true }
+                            // ConfigureRemote is optional — don't block "Done" on it
+                        val allDone = WIZARD_STEPS
+                            .filter { it !is ConfigureRemote }
+                            .all { stepStates[it.title] == true }
                             Button(
                                 enabled = allDone,
                                 onClick = {
@@ -148,6 +153,7 @@ fun HermesScreen(prefs: HermesPrefs, client: HermesClient) {
 
 @Composable
 private fun WizardRow(step: WizardStep, complete: Boolean, onClick: () -> Unit) {
+    val ctx = LocalContext.current
     Row(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -158,8 +164,34 @@ private fun WizardRow(step: WizardStep, complete: Boolean, onClick: () -> Unit) 
         Column(Modifier.weight(1f)) {
             Text(step.title, style = MaterialTheme.typography.bodyMedium)
             Text(step.description, style = MaterialTheme.typography.bodySmall)
+
+            // Inline text field for the optional G14 URL step
+            if (step is ConfigureRemote && !complete) {
+                var urlInput by remember { mutableStateOf(HermesConfig.load(ctx).remoteUrl) }
+                OutlinedTextField(
+                    value = urlInput,
+                    onValueChange = { urlInput = it },
+                    placeholder = { Text("http://g14.hermes-net:8765") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = {
+                        val trimmed = urlInput.trim()
+                        if (trimmed.isNotBlank()) {
+                            HermesConfig.save(ctx, HermesConfig.load(ctx).copy(remoteUrl = trimmed))
+                            onClick()
+                        }
+                    }) { Text("Save") }
+                    TextButton(onClick = onClick) { Text("Skip") }
+                }
+            }
         }
-        if (!complete) TextButton(onClick = onClick) { Text("Open") }
+        // "Open" button only for non-data-entry steps that aren't complete
+        if (!complete && step !is ConfigureRemote) {
+            TextButton(onClick = onClick) { Text("Open") }
+        }
     }
 }
 

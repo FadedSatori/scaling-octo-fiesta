@@ -68,8 +68,23 @@ object VerifyModel : WizardStep {
     override fun start(ctx: Context) { /* triggered by MLC's own model manager */ }
 }
 
+/**
+ * Optional step: enter the G14 daemon URL to enable remote dispatch.
+ * Skippable — the app works fully offline without it.
+ * Marked complete once cfg.remoteUrl is non-blank.
+ */
+object ConfigureRemote : WizardStep {
+    override val title = "Connect to G14 (optional)"
+    override val description =
+        "Enter http://g14.hermes-net:8765 to offload large prompts to the laptop."
+    override fun isComplete(ctx: Context): Boolean =
+        HermesConfig.load(ctx).remoteUrl.isNotBlank()
+    override fun start(ctx: Context) { /* data-entry step; UI handles it inline */ }
+}
+
 val WIZARD_STEPS: List<WizardStep> = listOf(
     InstallTailscale, InstallShizuku, GrantShizuku, DisableBatteryOpt, VerifyModel,
+    ConfigureRemote,
 )
 
 private fun Context.isPackageInstalled(pkg: String): Boolean = try {

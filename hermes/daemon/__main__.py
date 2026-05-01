@@ -31,6 +31,9 @@ class DaemonConfig(BaseModel):
     coder_model: str = "qwen2.5-coder:14b"
     agent_model: str = "hermes3:8b"
     fs_roots: list[str] = []
+    # Root of the local git clone — used by the config_changed handler.
+    # Defaults to three levels above this file (works for editable installs).
+    repo_root: str = str(Path(__file__).resolve().parent.parent.parent)
 
 
 def load_config(path: Path) -> DaemonConfig:
@@ -73,7 +76,7 @@ def build_app(cfg: DaemonConfig) -> FastAPI:
 
 
 async def run_router(cfg: DaemonConfig, app: FastAPI) -> None:
-    router = NatsRouter(url=cfg.nats_url, device=cfg.device, agent=app.state.agent)
+    router = NatsRouter(url=cfg.nats_url, device=cfg.device, agent=app.state.agent, cfg=cfg)
     await router.connect()
     app.state.router = router
     await router.serve()

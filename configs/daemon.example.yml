@@ -15,3 +15,7 @@ coder_model: "{{coder_model}}"
 fs_roots:
   - "C:/Users/{{username}}/Documents/hermes"
   - "C:/Users/{{username}}/Projects"
+
+# Path to the local git clone — used by the config_changed NATS handler
+# to run git pull and re-validate this file after propagate.ps1 fires.
+repo_root: "{{repo_root}}"

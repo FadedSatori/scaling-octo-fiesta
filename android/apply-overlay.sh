@@ -17,8 +17,9 @@
 set -euo pipefail
 
 # Pin so manifest/gradle anchors stay stable. Bump deliberately.
+# To advance the pin: git ls-remote "${MLC_REPO}" HEAD | cut -f1
 MLC_REPO="https://github.com/mlc-ai/mlc-llm.git"
-MLC_PIN="main"   # TODO(hermes): pin to a known-good SHA before v1.0
+MLC_PIN="6e6e5d27a84b09b088e6c55eeab7a7c4b7f8dc0f"  # Apr 2025 HEAD; last verified against overlay
 TREE="$(cd "$(dirname "$0")" && pwd)"
 DEST="${TREE}/mlc-chat"
 OVERLAY="${TREE}/overlay"
@@ -29,7 +30,11 @@ echo "==> dest:    ${DEST}"
 
 if [[ ! -d "${DEST}" ]]; then
     echo "==> cloning MLC Chat (${MLC_PIN})"
-    git clone --depth 1 --branch "${MLC_PIN}" "${MLC_REPO}" "${DEST}"
+    # --branch does not accept raw SHAs; use fetch+checkout for SHA support.
+    git init "${DEST}"
+    git -C "${DEST}" remote add origin "${MLC_REPO}"
+    git -C "${DEST}" fetch --depth 1 origin "${MLC_PIN}"
+    git -C "${DEST}" -c advice.detachedHead=false checkout FETCH_HEAD
 else
     echo "==> ${DEST} exists; skipping clone"
 fi
@@ -163,6 +168,10 @@ DEPS = """
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.compose.material3:material3:1.3.0")
+    // JVM unit tests — run via ./gradlew test, no emulator needed
+    testImplementation("org.jetbrains.kotlin:kotlin-test")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 """
 
 src = re.sub(
@@ -170,6 +179,28 @@ src = re.sub(
     r'\1' + DEPS,
     src, count=1,
 )
+
+# Patch minSdk to 30+ — Shizuku wireless ADB pairing requires Android 11+.
+# Three cases: existing minSdk line below 30, no minSdk at all, no
+# defaultConfig block (warns but does not abort the build).
+def _patch_min_sdk(s):
+    def _raise_value(m):
+        return m.group(0).replace(m.group(1), '30') if int(m.group(1)) < 30 else m.group(0)
+
+    patched, n = re.subn(r'minSdk\s*=\s*(\d+)', _raise_value, s, count=1)
+    if n:
+        return patched
+    patched, n = re.subn(
+        r'(defaultConfig\s*\{)',
+        r'\1\n        minSdk = 30  // Hermes: Shizuku requires Android 11+',
+        s, count=1,
+    )
+    if n:
+        return patched
+    print('WARNING: could not patch minSdk — defaultConfig block not found', file=sys.stderr)
+    return s
+
+src = _patch_min_sdk(src)
 
 open(path, 'w').write(src)
 print('gradle patched')

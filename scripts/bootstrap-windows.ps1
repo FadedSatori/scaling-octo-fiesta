@@ -130,6 +130,10 @@ Install-Winget 'Tailscale.Tailscale'      'Tailscale'
 Install-Winget 'Ollama.Ollama'            'Ollama'
 Install-Winget 'Python.Python.3.12'       'Python 3.12'
 Install-Winget 'Git.Git'                  'Git'
+# Docker Desktop: G14 only — hosts Qdrant vector store via Docker Compose.
+if ($DeviceRole -eq 'g14') {
+    Install-Winget 'Docker.DockerDesktop'     'Docker Desktop'
+}
 # NSSM is not in winget mainline reliably; install via direct download below.
 
 # ----------------------------------------------------------------------
@@ -148,6 +152,69 @@ if (-not (Test-Path (Join-Path $nssmDir 'nssm.exe'))) {
 }
 $nssm = Join-Path $nssmDir 'nssm.exe'
 Write-Ok "NSSM: $nssm"
+
+# ----------------------------------------------------------------------
+# 2b. NATS JetStream server (G14 only — it hosts the message broker)
+# ----------------------------------------------------------------------
+if ($DeviceRole -eq 'g14') {
+    Write-Section 'Installing NATS JetStream server (G14)'
+    $natsDir = Join-Path $InstallRoot 'nats'
+    $natsBin = Join-Path $natsDir 'nats-server.exe'
+
+    if (-not (Test-Path $natsBin)) {
+        New-Item -ItemType Directory -Force -Path $natsDir | Out-Null
+        $natsVersion = '2.10.14'
+        $natsZipUrl  = "https://github.com/nats-io/nats-server/releases/download/v${natsVersion}/nats-server-v${natsVersion}-windows-amd64.zip"
+        $natsZip     = Join-Path $env:TEMP 'nats-server.zip'
+        Invoke-WebRequest -Uri $natsZipUrl -OutFile $natsZip
+        Expand-Archive -Path $natsZip -DestinationPath $env:TEMP -Force
+        Copy-Item (Join-Path $env:TEMP "nats-server-v${natsVersion}-windows-amd64\nats-server.exe") $natsBin -Force
+        Remove-Item $natsZip -ErrorAction SilentlyContinue
+    }
+    Write-Ok "nats-server: $natsBin"
+
+    # JetStream store dir — matches the path declared in configs/nats.conf
+    New-Item -ItemType Directory -Force -Path 'C:\ProgramData\Hermes\nats-jetstream' | Out-Null
+
+    # Copy nats.conf to a stable location outside the repo so a future
+    # git-pull in propagate.ps1 doesn't change the path the service uses.
+    New-Item -ItemType Directory -Force -Path (Join-Path $InstallRoot 'logs') | Out-Null
+    $natsConf = Join-Path $InstallRoot 'nats.conf'
+    Copy-Item (Join-Path $repoDir 'configs\nats.conf') $natsConf -Force
+
+    $natsSvc = 'HermesNATS'
+    & $nssm stop    $natsSvc confirm 2>$null | Out-Null
+    & $nssm remove  $natsSvc confirm 2>$null | Out-Null
+    & $nssm install $natsSvc $natsBin '-c' "`"$natsConf`""
+    & $nssm set     $natsSvc AppDirectory   $natsDir
+    & $nssm set     $natsSvc AppStdout      (Join-Path $InstallRoot 'logs\nats-stdout.log')
+    & $nssm set     $natsSvc AppStderr      (Join-Path $InstallRoot 'logs\nats-stderr.log')
+    & $nssm set     $natsSvc AppRotateFiles 1
+    & $nssm set     $natsSvc AppRotateBytes 10485760
+    & $nssm set     $natsSvc Start          SERVICE_AUTO_START
+    & $nssm start   $natsSvc
+    Write-Ok 'Service HermesNATS installed and started'
+} else {
+    Write-Host 'Skipping NATS install (not g14)' -ForegroundColor Gray
+}
+
+# ----------------------------------------------------------------------
+# 2c. Qdrant vector store via Docker Compose (G14 only)
+# ----------------------------------------------------------------------
+if ($DeviceRole -eq 'g14') {
+    Write-Section 'Starting Qdrant vector store (Docker Compose, G14)'
+    if (-not (Test-Command docker)) {
+        Write-Warn2 'Docker not found. Install Docker Desktop and re-run to start Qdrant.'
+        Write-Warn2 'Download: https://docs.docker.com/desktop/install/windows-install/'
+    } else {
+        New-Item -ItemType Directory -Force -Path 'C:\ProgramData\Hermes\qdrant-storage' | Out-Null
+        $composeFile = Join-Path $repoDir 'configs\docker-compose.qdrant.yml'
+        docker compose -f $composeFile up -d --pull missing
+        Write-Ok 'Qdrant started on port 6333'
+    }
+} else {
+    Write-Host 'Skipping Qdrant (not g14)' -ForegroundColor Gray
+}
 
 # ----------------------------------------------------------------------
 # 3. Tailscale up
@@ -211,10 +278,11 @@ $cfgOut = Join-Path $InstallRoot 'daemon.yml'
 $tpl = Get-Content $cfgTpl -Raw
 $natsHost = if ($DeviceRole -eq 'g14') { '127.0.0.1' } else { 'g14.hermes-net' }
 $rendered = $tpl `
-    -replace '\{\{device\}\}',     $DeviceRole `
+    -replace '\{\{device\}\}',      $DeviceRole `
     -replace '\{\{coder_model\}\}', $coderModel `
-    -replace '\{\{nats_host\}\}',  $natsHost `
-    -replace '\{\{username\}\}',   $env:USERNAME
+    -replace '\{\{nats_host\}\}',   $natsHost `
+    -replace '\{\{username\}\}',    $env:USERNAME `
+    -replace '\{\{repo_root\}\}',   $repoDir.Replace('\', '/')
 Set-Content -Path $cfgOut -Value $rendered -Encoding UTF8
 Write-Ok "Config: $cfgOut"
 
