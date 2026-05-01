@@ -278,10 +278,11 @@ $cfgOut = Join-Path $InstallRoot 'daemon.yml'
 $tpl = Get-Content $cfgTpl -Raw
 $natsHost = if ($DeviceRole -eq 'g14') { '127.0.0.1' } else { 'g14.hermes-net' }
 $rendered = $tpl `
-    -replace '\{\{device\}\}',     $DeviceRole `
+    -replace '\{\{device\}\}',      $DeviceRole `
     -replace '\{\{coder_model\}\}', $coderModel `
-    -replace '\{\{nats_host\}\}',  $natsHost `
-    -replace '\{\{username\}\}',   $env:USERNAME
+    -replace '\{\{nats_host\}\}',   $natsHost `
+    -replace '\{\{username\}\}',    $env:USERNAME `
+    -replace '\{\{repo_root\}\}',   $repoDir.Replace('\', '/')
 Set-Content -Path $cfgOut -Value $rendered -Encoding UTF8
 Write-Ok "Config: $cfgOut"
 
