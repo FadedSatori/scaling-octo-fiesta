@@ -23,7 +23,7 @@ SMOKE_PROMPTS = [
 
 
 async def wait_for_daemon(url: str, timeout: float = 60.0) -> None:
-    start = asyncio.get_event_loop().time()
+    start = asyncio.get_running_loop().time()
     async with httpx.AsyncClient(timeout=2.0) as client:
         while True:
             try:
@@ -32,7 +32,7 @@ async def wait_for_daemon(url: str, timeout: float = 60.0) -> None:
                     return
             except Exception:
                 pass
-            if asyncio.get_event_loop().time() - start > timeout:
+            if asyncio.get_running_loop().time() - start > timeout:
                 raise TimeoutError(f"daemon at {url} did not respond within {timeout}s")
             await asyncio.sleep(1.0)
 
