@@ -1,0 +1,27 @@
+name: Python Tests
+
+on:
+  push:
+    branches: ["**"]
+    paths: ["hermes/**", ".github/workflows/python-tests.yml"]
+  pull_request:
+    paths: ["hermes/**", ".github/workflows/python-tests.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e "hermes/[dev]"
+
+      - name: Run test suite
+        run: cd hermes && python -m pytest tests/ -q --tb=short
