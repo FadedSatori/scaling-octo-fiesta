@@ -85,9 +85,9 @@ fun HermesScreen(prefs: HermesPrefs, client: HermesClient) {
                                 }
                             }) { Text("Re-check") }
                             // ConfigureRemote is optional — don't block "Done" on it
-                        val allDone = WIZARD_STEPS
-                            .filter { it !is ConfigureRemote }
-                            .all { stepStates[it.title] == true }
+                            val allDone = WIZARD_STEPS
+                                .filter { it !is ConfigureRemote }
+                                .all { stepStates[it.title] == true }
                             Button(
                                 enabled = allDone,
                                 onClick = {

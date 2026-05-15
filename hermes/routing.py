@@ -14,9 +14,10 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import nats
+from pydantic import ValidationError
 
 if TYPE_CHECKING:
     from hermes.agent.loop import AgentLoop
@@ -46,31 +47,50 @@ class NatsRouter:
         log.info("subscribed: %s", subject)
         await self._nc.subscribe("hermes.events.config_changed", cb=self._on_config_changed)
         log.info("subscribed: hermes.events.config_changed")
-        # Keep the coroutine alive
-        while True:
-            await asyncio.sleep(3600)
+        # Block until cancelled — asyncio.Event is cleaner than a sleep loop.
+        await asyncio.Event().wait()
 
     async def _on_request(self, msg: nats.aio.msg.Msg) -> None:
         try:
             payload = json.loads(msg.data.decode())
-        except json.JSONDecodeError:
-            await msg.respond(b'{"error":"invalid json"}')
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            await msg.respond(b'{"error":"invalid utf-8 or json"}')
             return
         from hermes.agent.loop import RunRequest  # local import to avoid cycle
-        req = RunRequest.model_validate(payload)
+        try:
+            req = RunRequest.model_validate(payload)
+        except ValidationError:
+            await msg.respond(b'{"error":"invalid request schema"}')
+            return
         resp = await self.agent.run(req)
         await msg.respond(resp.model_dump_json().encode())
 
+    async def _do_git_pull(self, repo: Path) -> bool:
+        """Run git pull --ff-only. Returns True on success (already logged)."""
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                ["git", "-C", str(repo), "pull", "--ff-only"],
+                capture_output=True, text=True, timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            log.error("config_changed: git pull timed out after 60s")
+            return False
+        except Exception as exc:  # noqa: BLE001
+            log.exception("config_changed: git pull raised: %s", exc)
+            return False
+        if result.returncode != 0:
+            log.error("config_changed: git pull failed (exit %d):\n%s",
+                      result.returncode, result.stderr.strip())
+            return False
+        log.info("config_changed: git pull ok:\n%s", result.stdout.strip())
+        return True
+
     async def _on_config_changed(self, msg: nats.aio.msg.Msg) -> None:
-        """
-        Received when any device runs propagate.ps1. Actions:
-          1. git pull --ff-only in the local repo clone
-          2. Re-validate daemon.yml against DaemonConfig
-          3. Restart the Windows service if the config changed
-        """
+        """Pull latest repo, re-validate config, restart Windows service if anything changed."""
         try:
             payload = json.loads(msg.data.decode()) if msg.data else {}
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             payload = {}
         log.info("config_changed: by=%s msg=%r",
                  payload.get("by", "unknown"), payload.get("msg", ""))
@@ -84,26 +104,10 @@ class NatsRouter:
             log.warning("config_changed: repo_root %s not found; skipping pull", repo)
             return
 
-        # Step 1: git pull
-        try:
-            result = await asyncio.to_thread(
-                subprocess.run,
-                ["git", "-C", str(repo), "pull", "--ff-only"],
-                capture_output=True, text=True, timeout=60,
-            )
-            if result.returncode != 0:
-                log.error("config_changed: git pull failed (exit %d):\n%s",
-                          result.returncode, result.stderr.strip())
-                return
-            log.info("config_changed: git pull ok:\n%s", result.stdout.strip())
-        except subprocess.TimeoutExpired:
-            log.error("config_changed: git pull timed out after 60s")
-            return
-        except Exception as exc:  # noqa: BLE001
-            log.exception("config_changed: git pull raised: %s", exc)
+        if not await self._do_git_pull(repo):
             return
 
-        # Step 2: re-validate daemon.yml (lives one level above the repo clone)
+        # Re-validate daemon.yml (lives one level above the repo clone)
         cfg_path = repo.parent / "daemon.yml"
         if not cfg_path.exists():
             log.warning("config_changed: daemon.yml not found at %s; skipping", cfg_path)
@@ -116,23 +120,22 @@ class NatsRouter:
             log.error("config_changed: daemon.yml re-validate failed: %s", exc)
             return
 
-        # Step 3: restart the Windows service if any field changed
-        if new_cfg != self._cfg:
-            log.info("config_changed: config differs — requesting service restart")
-            if sys.platform == "win32":
-                try:
-                    await asyncio.to_thread(subprocess.run, ["sc", "stop", "Hermes"],
-                                            capture_output=True, timeout=30)
-                    await asyncio.to_thread(subprocess.run, ["sc", "start", "Hermes"],
-                                            capture_output=True, timeout=30)
-                    log.info("config_changed: service restart requested")
-                except Exception as exc:  # noqa: BLE001
-                    log.error("config_changed: service restart failed: %s", exc)
-            else:
-                log.info("config_changed: non-Windows; manual restart required to "
-                         "pick up config changes")
-        else:
+        if new_cfg == self._cfg:
             log.info("config_changed: config unchanged after pull; no restart needed")
+            return
+
+        log.info("config_changed: config differs — requesting service restart")
+        if sys.platform != "win32":
+            log.info("config_changed: non-Windows; manual restart required to pick up changes")
+            return
+        try:
+            await asyncio.to_thread(subprocess.run, ["sc", "stop", "Hermes"],
+                                    capture_output=True, timeout=30)
+            await asyncio.to_thread(subprocess.run, ["sc", "start", "Hermes"],
+                                    capture_output=True, timeout=30)
+            log.info("config_changed: service restart requested")
+        except Exception as exc:  # noqa: BLE001
+            log.error("config_changed: service restart failed: %s", exc)
 
 
 async def _publish(args: argparse.Namespace) -> int:
@@ -150,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
     pub = sub.add_parser("publish")
     pub.add_argument("--nats", required=True)
     pub.add_argument("--subject", required=True)
-    pub.add_argument("--payload", required=True)
+    pub.add_argument("--payload", default="{}")
 
     args = p.parse_args(argv)
     if args.cmd == "publish":

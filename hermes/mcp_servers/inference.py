@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 
@@ -20,12 +20,11 @@ class InferenceServer:
     def __init__(self, *, ollama_url: str, coder_model: str, agent_model: str) -> None:
         self.ollama_url = ollama_url.rstrip("/")
         self.coder_model = coder_model
-        self._agent_model = agent_model
+        self.agent_model = agent_model
         self._client = httpx.AsyncClient(timeout=300.0)
 
-    @property
-    def agent_model(self) -> str:
-        return self._agent_model
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
     async def chat(self, *, model: str, messages: list[dict[str, Any]]) -> str:
         r = await self._client.post(
@@ -33,14 +32,13 @@ class InferenceServer:
             json={"model": model, "messages": messages, "stream": False},
         )
         r.raise_for_status()
-        data = r.json()
-        return data["message"]["content"]
+        return r.json()["message"]["content"]
 
     async def call(self, op: str, args: dict[str, Any]) -> str:
         if op != "chat":
-            return f"error: unknown op '{op}'"
+            raise HTTPException(400, f"unknown op '{op}'")
         req = ChatReq.model_validate(args)
-        return await self.chat(model=req.model or self._agent_model, messages=req.messages)
+        return await self.chat(model=req.model or self.agent_model, messages=req.messages)
 
     def mount(self, app: FastAPI, *, prefix: str) -> None:
         @app.post(f"{prefix}/chat")

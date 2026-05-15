@@ -8,6 +8,7 @@ import argparse
 import asyncio
 import logging
 import sys
+import time
 from pathlib import Path
 
 import httpx
@@ -23,7 +24,7 @@ SMOKE_PROMPTS = [
 
 
 async def wait_for_daemon(url: str, timeout: float = 60.0) -> None:
-    start = asyncio.get_event_loop().time()
+    deadline = time.monotonic() + timeout
     async with httpx.AsyncClient(timeout=2.0) as client:
         while True:
             try:
@@ -32,7 +33,7 @@ async def wait_for_daemon(url: str, timeout: float = 60.0) -> None:
                     return
             except Exception:
                 pass
-            if asyncio.get_event_loop().time() - start > timeout:
+            if time.monotonic() >= deadline:
                 raise TimeoutError(f"daemon at {url} did not respond within {timeout}s")
             await asyncio.sleep(1.0)
 
@@ -46,8 +47,7 @@ async def smoke(url: str) -> int:
                 log.error("smoke: %r -> HTTP %d", prompt, r.status_code)
                 fails += 1
                 continue
-            data = r.json()
-            if not data.get("final"):
+            if not r.json().get("final"):
                 log.error("smoke: %r -> no final answer", prompt)
                 fails += 1
             else:

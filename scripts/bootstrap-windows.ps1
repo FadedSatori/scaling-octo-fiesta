@@ -154,7 +154,32 @@ $nssm = Join-Path $nssmDir 'nssm.exe'
 Write-Ok "NSSM: $nssm"
 
 # ----------------------------------------------------------------------
-# 2b. NATS JetStream server (G14 only — it hosts the message broker)
+# 3. Tailscale up
+# ----------------------------------------------------------------------
+Write-Section 'Tailscale'
+$tailscale = 'C:\Program Files\Tailscale\tailscale.exe'
+if (-not (Test-Path $tailscale)) {
+    Write-Warn2 'Tailscale binary not found at expected path; check installation.'
+} else {
+    & $tailscale up --hostname "$DeviceRole.hermes-net" --accept-routes
+    Write-Ok "Tailscale up as $DeviceRole.hermes-net"
+}
+
+# ----------------------------------------------------------------------
+# 4. Clone repo
+# ----------------------------------------------------------------------
+Write-Section 'Cloning Hermes repo'
+$repoDir = Join-Path $InstallRoot 'repo'
+if (Test-Path $repoDir) {
+    Write-Host 'Repo exists — pulling latest.'
+    git -C $repoDir pull --ff-only
+} else {
+    git clone $RepoUrl $repoDir
+}
+Write-Ok "Repo: $repoDir"
+
+# ----------------------------------------------------------------------
+# 4b. NATS JetStream server (G14 only — must run after repo clone for nats.conf)
 # ----------------------------------------------------------------------
 if ($DeviceRole -eq 'g14') {
     Write-Section 'Installing NATS JetStream server (G14)'
@@ -199,7 +224,7 @@ if ($DeviceRole -eq 'g14') {
 }
 
 # ----------------------------------------------------------------------
-# 2c. Qdrant vector store via Docker Compose (G14 only)
+# 4c. Qdrant vector store via Docker Compose (G14 only)
 # ----------------------------------------------------------------------
 if ($DeviceRole -eq 'g14') {
     Write-Section 'Starting Qdrant vector store (Docker Compose, G14)'
@@ -215,31 +240,6 @@ if ($DeviceRole -eq 'g14') {
 } else {
     Write-Host 'Skipping Qdrant (not g14)' -ForegroundColor Gray
 }
-
-# ----------------------------------------------------------------------
-# 3. Tailscale up
-# ----------------------------------------------------------------------
-Write-Section 'Tailscale'
-$tailscale = 'C:\Program Files\Tailscale\tailscale.exe'
-if (-not (Test-Path $tailscale)) {
-    Write-Warn2 'Tailscale binary not found at expected path; check installation.'
-} else {
-    & $tailscale up --hostname "$DeviceRole.hermes-net" --accept-routes
-    Write-Ok "Tailscale up as $DeviceRole.hermes-net"
-}
-
-# ----------------------------------------------------------------------
-# 4. Clone repo
-# ----------------------------------------------------------------------
-Write-Section 'Cloning Hermes repo'
-$repoDir = Join-Path $InstallRoot 'repo'
-if (Test-Path $repoDir) {
-    Write-Host 'Repo exists — pulling latest.'
-    git -C $repoDir pull --ff-only
-} else {
-    git clone $RepoUrl $repoDir
-}
-Write-Ok "Repo: $repoDir"
 
 # ----------------------------------------------------------------------
 # 5. Python venv + install daemon
