@@ -78,7 +78,10 @@ class UiTool : ToolNamespace {
         // All ops are implemented by shelling out via Shizuku's `shell` UID.
         // This avoids pulling in a UiAutomator dep and keeps the surface narrow.
         val cmd = when (op) {
-            "dump" -> "uiautomator dump /dev/tty"
+            // /dev/tty requires a controlling TTY (works only from `adb shell`).
+            // Shizuku spawns `sh -c` with no TTY, so dump to /data/local/tmp/
+            // (writable by the shell UID) then cat the XML back.
+            "dump" -> "uiautomator dump /data/local/tmp/hermes-ui.xml >/dev/null 2>&1 && cat /data/local/tmp/hermes-ui.xml"
             "tap" -> "input tap ${args.int("x")} ${args.int("y")}"
             "swipe" -> "input swipe ${args.int("x1")} ${args.int("y1")} ${args.int("x2")} ${args.int("y2")} ${args.int("duration_ms", 300)}"
             "input_text" -> "input text ${args.string("text").shellEscape()}"
