@@ -20,7 +20,11 @@ if (-not (Test-Path $repoDir)) { throw "Hermes repo not found at $repoDir" }
 Push-Location $repoDir
 try {
     git add configs/ docs/
-    if (git diff --cached --quiet) {
+    # `git diff --cached --quiet` writes nothing to stdout; PowerShell's
+    # `if (cmd)` treats stdout as the condition, so the natural reading is
+    # always false. Use $LASTEXITCODE: 0 = no diff, 1 = diff present.
+    git diff --cached --quiet
+    if ($LASTEXITCODE -eq 0) {
         Write-Host 'No config changes to push.'
     } else {
         git commit -m "propagate: $Message"
