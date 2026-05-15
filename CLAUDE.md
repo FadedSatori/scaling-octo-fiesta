@@ -44,7 +44,7 @@ python -m hermes.eval
 python -m hermes.routing publish --nats nats://g14.hermes-net:4222 \
     --subject hermes.events.config_changed --payload '{"by":"manual"}'
 
-# tests (the tests/ directory lands when PR #3 merges; not present at 19c3cd9)
+# tests
 cd hermes && python -m pytest tests/ -q --tb=short
 cd hermes && python -m pytest tests/test_parser.py::TestParse::test_single_tool_call
 ```
