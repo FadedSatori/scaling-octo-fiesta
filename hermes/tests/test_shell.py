@@ -30,8 +30,11 @@ class TestShellExec:
         assert "before" in result
 
     async def test_timeout_raises_408(self, shell: ShellServer):
+        # 0.5s threshold leaves enough headroom for shell-spawn overhead on
+        # slow CI runners; sleep 5 ensures the process is still alive when
+        # the timeout fires.
         with pytest.raises(HTTPException) as exc:
-            await shell.call("exec", {"command": "sleep 10", "timeout_seconds": 0.1})
+            await shell.call("exec", {"command": "sleep 5", "timeout_seconds": 0.5})
         assert exc.value.status_code == 408
 
     async def test_unknown_op_raises_400(self, shell: ShellServer):

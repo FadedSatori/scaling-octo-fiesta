@@ -124,6 +124,76 @@ class TestOnConfigChanged:
             await router._on_config_changed(msg)
 
 
+@pytest.mark.asyncio
+class TestOnRequest:
+    """Primary NATS dispatch path: hermes.req.<device> → agent.run → reply."""
+
+    async def test_valid_request_runs_agent_and_responds(self):
+        from hermes.agent.loop import RunRequest, RunResponse
+        router = _make_router()
+        expected = RunResponse(final="done", steps=2, transcript=[])
+        router.agent.run = AsyncMock(return_value=expected)
+        msg = MagicMock()
+        msg.data = json.dumps({"prompt": "hi", "max_steps": 4}).encode()
+        msg.respond = AsyncMock()
+
+        await router._on_request(msg)
+
+        router.agent.run.assert_awaited_once()
+        called_req = router.agent.run.call_args[0][0]
+        assert isinstance(called_req, RunRequest)
+        assert called_req.prompt == "hi"
+        assert called_req.max_steps == 4
+
+        msg.respond.assert_awaited_once()
+        reply = json.loads(msg.respond.call_args[0][0])
+        assert reply["final"] == "done"
+        assert reply["steps"] == 2
+
+    async def test_invalid_json_responds_with_error_and_skips_agent(self):
+        router = _make_router()
+        router.agent.run = AsyncMock()
+        msg = MagicMock()
+        msg.data = b"not json at all"
+        msg.respond = AsyncMock()
+
+        await router._on_request(msg)
+
+        msg.respond.assert_awaited_once()
+        reply = json.loads(msg.respond.call_args[0][0])
+        assert "error" in reply
+        router.agent.run.assert_not_awaited()
+
+    async def test_invalid_utf8_responds_with_error_and_skips_agent(self):
+        router = _make_router()
+        router.agent.run = AsyncMock()
+        msg = MagicMock()
+        msg.data = b"\xff\xfe\x00\x00 not valid utf-8"
+        msg.respond = AsyncMock()
+
+        await router._on_request(msg)
+
+        msg.respond.assert_awaited_once()
+        reply = json.loads(msg.respond.call_args[0][0])
+        assert "error" in reply
+        router.agent.run.assert_not_awaited()
+
+    async def test_invalid_schema_responds_with_error_and_skips_agent(self):
+        # Valid JSON, but RunRequest requires `prompt`.
+        router = _make_router()
+        router.agent.run = AsyncMock()
+        msg = MagicMock()
+        msg.data = json.dumps({"max_steps": 4}).encode()
+        msg.respond = AsyncMock()
+
+        await router._on_request(msg)
+
+        msg.respond.assert_awaited_once()
+        reply = json.loads(msg.respond.call_args[0][0])
+        assert "error" in reply
+        router.agent.run.assert_not_awaited()
+
+
 class TestNatsRouterInit:
     def test_cfg_stored(self):
         cfg = DaemonConfig(device="g14")
