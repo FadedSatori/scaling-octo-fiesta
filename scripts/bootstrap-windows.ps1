@@ -255,10 +255,71 @@ $py = Join-Path $venv 'Scripts\python.exe'
 Write-Ok 'Daemon installed in venv'
 
 # ----------------------------------------------------------------------
+# 5b. Ollama as an NSSM service
+#     Without this the Hermes service (LocalSystem at boot) talks to a
+#     dead 127.0.0.1:11434 until the desktop user logs in.
+# ----------------------------------------------------------------------
+Write-Section 'Registering Ollama as a service (HermesOllama)'
+
+# winget can install Ollama to either Program Files (system) or
+# LOCALAPPDATA\Programs\Ollama (per-user). Resolve at bootstrap time
+# so the NSSM service holds an absolute path and LocalSystem doesn't
+# need a PATH lookup.
+$ollamaBin = $null
+$cmd = Get-Command ollama -ErrorAction SilentlyContinue
+if ($cmd) { $ollamaBin = $cmd.Source }
+if (-not $ollamaBin) {
+    $fallback = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'
+    if (Test-Path $fallback) { $ollamaBin = $fallback }
+}
+if (-not $ollamaBin) {
+    throw 'ollama.exe not found after winget install; reopen PowerShell to refresh PATH or set OLLAMA path manually.'
+}
+Write-Ok "ollama.exe: $ollamaBin"
+
+# System-wide model store: lets the admin's `ollama pull` (next step)
+# and the LocalSystem service share one cache. Without this, LocalSystem
+# would look in C:\Windows\System32\config\systemprofile\.ollama and miss
+# every model pulled during bootstrap.
+$ollamaModels = 'C:\ProgramData\Hermes\ollama-models'
+New-Item -ItemType Directory -Force -Path $ollamaModels | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $InstallRoot 'logs') | Out-Null
+
+$ollamaSvc = 'HermesOllama'
+& $nssm stop    $ollamaSvc confirm 2>$null | Out-Null
+& $nssm remove  $ollamaSvc confirm 2>$null | Out-Null
+& $nssm install $ollamaSvc $ollamaBin 'serve'
+& $nssm set     $ollamaSvc AppDirectory   (Split-Path $ollamaBin)
+& $nssm set     $ollamaSvc AppEnvironmentExtra "OLLAMA_MODELS=$ollamaModels" "OLLAMA_HOST=127.0.0.1:11434"
+& $nssm set     $ollamaSvc AppStdout      (Join-Path $InstallRoot 'logs\ollama-stdout.log')
+& $nssm set     $ollamaSvc AppStderr      (Join-Path $InstallRoot 'logs\ollama-stderr.log')
+& $nssm set     $ollamaSvc AppRotateFiles 1
+& $nssm set     $ollamaSvc AppRotateBytes 10485760
+& $nssm set     $ollamaSvc Start          SERVICE_AUTO_START
+& $nssm start   $ollamaSvc
+Write-Ok 'Service HermesOllama installed and started'
+
+# Wait for the service to bind 11434 before pulling models.
+$deadline = (Get-Date).AddSeconds(30)
+$ready = $false
+while ((Get-Date) -lt $deadline) {
+    try {
+        Invoke-WebRequest -Uri 'http://127.0.0.1:11434/api/tags' `
+            -UseBasicParsing -TimeoutSec 2 | Out-Null
+        $ready = $true; break
+    } catch { Start-Sleep -Seconds 1 }
+}
+if (-not $ready) { throw 'HermesOllama did not respond on 127.0.0.1:11434 within 30s' }
+Write-Ok 'HermesOllama responding on 127.0.0.1:11434'
+
+# ----------------------------------------------------------------------
 # 6. Pull Ollama models
 # ----------------------------------------------------------------------
 Write-Section 'Pulling Ollama models'
-Start-Service Ollama -ErrorAction SilentlyContinue
+# Point the admin-user `ollama pull` at the HermesOllama service so the
+# downloaded blobs land in the shared store, not the admin's profile.
+$env:OLLAMA_MODELS = $ollamaModels
+$env:OLLAMA_HOST   = '127.0.0.1:11434'
 $vram = Get-VRAMGigabytes
 Write-Host "Detected VRAM: $vram GB"
 $coderModel = Pick-CoderModel $vram
@@ -266,6 +327,9 @@ $models = @('hermes3:8b', $coderModel)
 foreach ($m in $models) {
     Write-Host "ollama pull $m ..."
     ollama pull $m
+    if ($LASTEXITCODE -ne 0) {
+        throw "ollama pull $m failed (exit $LASTEXITCODE) — check HermesOllama logs at $InstallRoot\logs"
+    }
 }
 Write-Ok ("Models: " + ($models -join ', '))
 
@@ -300,6 +364,11 @@ $svcName = 'Hermes'
 & $nssm set     $svcName AppRotateFiles 1
 & $nssm set     $svcName AppRotateBytes 10485760
 & $nssm set     $svcName Start          SERVICE_AUTO_START
+# Hermes needs Ollama on every device, and NATS on the G14. NSSM accepts
+# a space-separated list under DependOnService; SCM will serialize starts.
+$deps = @('HermesOllama')
+if ($DeviceRole -eq 'g14') { $deps += 'HermesNATS' }
+& $nssm set     $svcName DependOnService ($deps -join ' ')
 New-Item -ItemType Directory -Force -Path (Join-Path $InstallRoot 'logs') | Out-Null
 & $nssm start   $svcName
 Write-Ok 'Service Hermes installed and started'
