@@ -171,7 +171,7 @@ private fun WizardRow(step: WizardStep, complete: Boolean, onClick: () -> Unit) 
                 OutlinedTextField(
                     value = urlInput,
                     onValueChange = { urlInput = it },
-                    placeholder = { Text("http://g14.hermes-net:8765") },
+                    placeholder = { Text("http://UNIT-G14-MainNode:8765") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),

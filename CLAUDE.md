@@ -41,7 +41,7 @@ python -m hermes.daemon.installer --config /path/to/daemon.yml --device g14
 python -m hermes.eval
 
 # publish a propagation event manually
-python -m hermes.routing publish --nats nats://g14.hermes-net:4222 \
+python -m hermes.routing publish --nats nats://UNIT-G14-MainNode:4222 \
     --subject hermes.events.config_changed --payload '{"by":"manual"}'
 
 # tests
@@ -131,14 +131,14 @@ Tool name format is strictly `<namespace>.<op>` (split on first `.`).
 
 ```
         Tailscale mesh (WireGuard)
-   s24.hermes-net ─┬─ g14.hermes-net ─┬─ lenovo.hermes-net
-                   │                  │
-                   ▼                  ▼
-            NATS JetStream :4222 (G14)
-              hermes.req.<device>     ← per-device inbox
-              hermes.resp.<id>        ← NATS request/reply
-              hermes.events.*         ← config_changed, model_promoted
-            Qdrant :6333 (G14)        ← installed, no code integration yet
+   UNIT-S24-EdgeNode ─┬─ UNIT-G14-MainNode ─┬─ UNIT-Lenovo-MIA
+                      │                     │
+                      ▼                     ▼
+               NATS JetStream :4222 (G14)
+                 hermes.req.<device>     ← per-device inbox
+                 hermes.resp.<id>        ← NATS request/reply
+                 hermes.events.*         ← config_changed, model_promoted
+               Qdrant :6333 (G14)        ← installed, no code integration yet
 ```
 
 - Tailscale ACL (`configs/tailscale-acl.example.json`) is the network

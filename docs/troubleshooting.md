@@ -41,7 +41,7 @@ been stripped.
 
 **`hermes.req.s24` requests time out.** Phone's foreground service was
 killed. See the battery-opt note above. Verify with
-`curl http://s24.hermes-net:8765/healthz` from a laptop.
+`curl http://UNIT-S24-EdgeNode:8765/healthz` from a laptop.
 
 **Propagate doesn't pick up on Lenovo.** Daemon is up but not subscribed.
 Check `stdout.log` for "subscribed: hermes.req.lenovo". If missing, the

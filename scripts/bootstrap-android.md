@@ -22,7 +22,7 @@ The wizard walks the user through:
 
 1. **Tailscale**
    - Opens Play Store to install Tailscale if missing.
-   - Prompts user to sign in and tag the device with hostname `s24.hermes-net`.
+   - Prompts user to sign in and tag the device with hostname `UNIT-S24-EdgeNode`.
 
 2. **Shizuku** (the privilege layer for filesystem + desktop tools)
    - Opens Play Store to install [Shizuku](https://shizuku.rikka.app/).
@@ -42,7 +42,7 @@ The wizard walks the user through:
    - Optionally downloads Hermes-3-3B-MLC for offline tool-calling.
 
 5. **Mesh registration**
-   - Connects to the laptops over Tailscale (`g14.hermes-net:4222` for NATS).
+   - Connects to the laptops over Tailscale (`UNIT-G14-MainNode:4222` for NATS).
    - Subscribes to `hermes.req.s24` and registers in the device directory.
 
 6. **Smoke test**
@@ -54,7 +54,7 @@ The wizard walks the user through:
 - Notification drawer should show a persistent "Hermes is running" entry.
 - From a laptop on the same Tailnet:
   ```powershell
-  curl http://s24.hermes-net:8765/healthz
+  curl http://UNIT-S24-EdgeNode:8765/healthz
   ```
 - Conversation history should appear under Settings → Sessions.
 

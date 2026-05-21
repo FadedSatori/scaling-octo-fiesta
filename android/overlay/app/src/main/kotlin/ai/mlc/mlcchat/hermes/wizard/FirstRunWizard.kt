@@ -76,7 +76,7 @@ object VerifyModel : WizardStep {
 object ConfigureRemote : WizardStep {
     override val title = "Connect to G14 (optional)"
     override val description =
-        "Enter http://g14.hermes-net:8765 to offload large prompts to the laptop."
+        "Enter http://UNIT-G14-MainNode:8765 to offload large prompts to the laptop."
     override fun isComplete(ctx: Context): Boolean =
         HermesConfig.load(ctx).remoteUrl.isNotBlank()
     override fun start(ctx: Context) { /* data-entry step; UI handles it inline */ }

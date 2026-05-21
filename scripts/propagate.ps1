@@ -9,7 +9,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$NatsUrl = 'nats://g14.hermes-net:4222',
+    [string]$NatsUrl = 'nats://UNIT-G14-MainNode:4222',
     [string]$Message = 'config update'
 )
 

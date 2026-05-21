@@ -31,7 +31,7 @@
 
 ### Mesh — Tailscale
 - Free tier, 100-device limit, MagicDNS.
-- Stable hostnames: `s24.hermes-net`, `g14.hermes-net`, `lenovo.hermes-net`.
+- Stable hostnames: `UNIT-S24-EdgeNode`, `UNIT-G14-MainNode`, `UNIT-Lenovo-MIA`.
 - ACL pinned to the four Hermes ports (see `configs/tailscale-acl.example.json`).
 - Wake-on-LAN configured on the laptops; phone can wake them through the
   Tailscale subnet router.

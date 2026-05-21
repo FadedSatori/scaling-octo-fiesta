@@ -18,7 +18,7 @@ config, and registers a Windows service.
    prompts for `g14` / `lenovo` role if not passed.
 2. **System deps** — winget installs Tailscale, Ollama, Python 3.12, Git.
 3. **NSSM** — direct download from nssm.cc (winget coverage is unreliable).
-4. **Tailscale** — runs `tailscale up --hostname <role>.hermes-net`.
+4. **Tailscale** — runs `tailscale up --hostname <name>` (`UNIT-G14-MainNode` on the G14, `UNIT-Lenovo-MIA` on the Lenovo).
 5. **Repo clone** — to `%LOCALAPPDATA%\Hermes\repo`.
 6. **venv + pip install** — installs the daemon as an editable package.
 7. **Models** — pulls `hermes3:8b` plus a Qwen2.5-Coder model sized via

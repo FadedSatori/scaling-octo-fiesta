@@ -33,7 +33,7 @@ A separate path for new model versions:
 
 ```powershell
 # from any device:
-$nats = "nats://g14.hermes-net:4222"
+$nats = "nats://UNIT-G14-MainNode:4222"
 nats request hermes.req.lenovo `
     '{"prompt": "echo hermes-prop-test via shell", "max_steps": 2}' --raw
 

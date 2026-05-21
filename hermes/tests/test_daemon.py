@@ -54,7 +54,7 @@ class TestLoadConfig:
         yaml_content = """
 device: "lenovo"
 bind_port: 9000
-nats_url: "nats://g14.hermes-net:4222"
+nats_url: "nats://UNIT-G14-MainNode:4222"
 ollama_url: "http://127.0.0.1:11434"
 agent_model: "hermes3:8b"
 coder_model: "qwen2.5-coder:14b"
@@ -67,7 +67,7 @@ repo_root: "C:/Users/user/AppData/Local/Hermes/repo"
         cfg = load_config(f)
         assert cfg.device == "lenovo"
         assert cfg.bind_port == 9000
-        assert cfg.nats_url == "nats://g14.hermes-net:4222"
+        assert cfg.nats_url == "nats://UNIT-G14-MainNode:4222"
         assert cfg.fs_roots == ["C:/Users/user/Documents/hermes"]
         assert cfg.repo_root == "C:/Users/user/AppData/Local/Hermes/repo"
 

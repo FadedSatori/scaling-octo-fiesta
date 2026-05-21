@@ -161,8 +161,9 @@ $tailscale = 'C:\Program Files\Tailscale\tailscale.exe'
 if (-not (Test-Path $tailscale)) {
     Write-Warn2 'Tailscale binary not found at expected path; check installation.'
 } else {
-    & $tailscale up --hostname "$DeviceRole.hermes-net" --accept-routes
-    Write-Ok "Tailscale up as $DeviceRole.hermes-net"
+    $tsName = if ($DeviceRole -eq 'g14') { 'UNIT-G14-MainNode' } else { 'UNIT-Lenovo-MIA' }
+    & $tailscale up --hostname $tsName --accept-routes
+    Write-Ok "Tailscale up as $tsName"
 }
 
 # ----------------------------------------------------------------------
@@ -340,7 +341,7 @@ Write-Section 'Rendering daemon config'
 $cfgTpl = Join-Path $repoDir 'configs\daemon.example.yml'
 $cfgOut = Join-Path $InstallRoot 'daemon.yml'
 $tpl = Get-Content $cfgTpl -Raw
-$natsHost = if ($DeviceRole -eq 'g14') { '127.0.0.1' } else { 'g14.hermes-net' }
+$natsHost = if ($DeviceRole -eq 'g14') { '127.0.0.1' } else { 'UNIT-G14-MainNode' }
 $rendered = $tpl `
     -replace '\{\{device\}\}',      $DeviceRole `
     -replace '\{\{coder_model\}\}', $coderModel `
