@@ -15,6 +15,7 @@ import json
 import logging
 import sys
 from pathlib import Path
+from typing import TypedDict
 
 import httpx
 import nats
@@ -29,6 +30,14 @@ EVAL_PROMPTS: list[tuple[str, str]] = [
     ("list the files in the current working directory", ""),
     ("echo 'hermes eval ok' to stdout via the shell tool", "hermes eval ok"),
 ]
+
+INCUMBENT_FILE = "eval_incumbent.json"
+PROMOTION_THRESHOLD = 2.0  # percentage points
+
+
+class Incumbent(TypedDict):
+    model: str
+    score: float
 
 
 async def run_eval(daemon_url: str, model: str | None) -> dict[str, object]:
@@ -60,44 +69,71 @@ async def run_eval(daemon_url: str, model: str | None) -> dict[str, object]:
     }
 
 
-def _load_incumbent(repo_root: Path) -> dict[str, object]:
-    """Load incumbent model score from eval_incumbent.json. Returns defaults if missing."""
-    incumbent_file = repo_root / "eval_incumbent.json"
+def _load_incumbent(repo_root: Path) -> Incumbent:
+    """Load incumbent model score. Returns defaults if missing."""
+    incumbent_file = repo_root / INCUMBENT_FILE
     if incumbent_file.exists():
         try:
             with incumbent_file.open("r", encoding="utf-8") as f:
                 return json.load(f)
-        except Exception as exc:  # noqa: BLE001
+        except (json.JSONDecodeError, OSError) as exc:
             log.warning("failed to load incumbent: %s", exc)
     return {"model": "none", "score": 0.0}
 
 
-def _save_incumbent(repo_root: Path, model: str, score: float) -> None:
-    """Save model and score as the new incumbent."""
-    incumbent_file = repo_root / "eval_incumbent.json"
+def _save_incumbent(repo_root: Path, incumbent: Incumbent) -> None:
+    """Persist model and score as the new incumbent."""
+    incumbent_file = repo_root / INCUMBENT_FILE
     try:
         with incumbent_file.open("w", encoding="utf-8") as f:
-            json.dump({"model": model, "score": score}, f)
-        log.info("saved incumbent: model=%s score=%.1f%%", model, score * 100)
-    except Exception as exc:  # noqa: BLE001
+            json.dump(incumbent, f)
+        log.info("saved incumbent: model=%s score=%.1f%%", incumbent["model"], incumbent["score"] * 100)
+    except OSError as exc:
         log.error("failed to save incumbent: %s", exc)
 
 
-async def _publish_model_promoted(nats_url: str, model: str, score: float, improvement_pct: float) -> None:
-    """Publish hermes.events.model_promoted to NATS."""
+async def _maybe_promote_model(
+    repo_root: Path,
+    nats_url: str,
+    new_model: str,
+    new_score: float,
+    incumbent: Incumbent,
+    skip: bool,
+) -> None:
+    """Compare new score vs incumbent and promote if threshold exceeded."""
+    incumbent_score = incumbent["score"]
+    if incumbent_score == 0:
+        log.info("no incumbent found; initializing baseline")
+        _save_incumbent(repo_root, {"model": new_model, "score": new_score})
+        return
+
+    improvement_pct = (new_score - incumbent_score) / incumbent_score * 100
+    log.info("score vs incumbent (model=%s score=%.1f%%): improvement=%.1f%%",
+             incumbent["model"], incumbent_score * 100, improvement_pct)
+
+    if improvement_pct < PROMOTION_THRESHOLD:
+        return
+
+    if skip:
+        log.info("threshold met (%.1f%%) but --skip-promotion set", improvement_pct)
+        return
+
+    log.info("threshold met (%.1f%%) — promoting model", improvement_pct)
     try:
         nc = await nats.connect(nats_url)
         payload = json.dumps({
-            "model": model,
-            "score": score,
+            "model": new_model,
+            "score": new_score,
             "improvement_pct": improvement_pct,
         })
         await nc.publish("hermes.events.model_promoted", payload.encode())
         await nc.flush()
         await nc.close()
-        log.info("published model_promoted: model=%s improvement=%.1f%%", model, improvement_pct)
-    except Exception as exc:  # noqa: BLE001
+        log.info("published model_promoted: model=%s improvement=%.1f%%", new_model, improvement_pct)
+    except OSError as exc:
         log.error("failed to publish model_promoted: %s", exc)
+
+    _save_incumbent(repo_root, {"model": new_model, "score": new_score})
 
 
 async def main_async(args: argparse.Namespace) -> int:
@@ -117,21 +153,14 @@ async def main_async(args: argparse.Namespace) -> int:
 
     repo_root = Path(cfg.repo_root)
     incumbent = _load_incumbent(repo_root)
-    incumbent_score = float(incumbent.get("score", 0.0))
-
-    if incumbent_score > 0:
-        improvement_pct = (new_score - incumbent_score) / incumbent_score * 100
-        log.info("score vs incumbent (model=%s score=%.1f%%): improvement=%.1f%%",
-                 incumbent.get("model"), incumbent_score * 100, improvement_pct)
-        if improvement_pct >= 2.0 and not args.skip_promotion:
-            log.info("threshold met (+2.0%%) — promoting model")
-            await _publish_model_promoted(cfg.nats_url, model_name, new_score, improvement_pct)
-            _save_incumbent(repo_root, model_name, new_score)
-        elif improvement_pct >= 2.0 and args.skip_promotion:
-            log.info("threshold met (+2.0%%) but --skip-promotion set; not promoting")
-    else:
-        log.info("no incumbent found; initializing with current model")
-        _save_incumbent(repo_root, model_name, new_score)
+    await _maybe_promote_model(
+        repo_root=repo_root,
+        nats_url=cfg.nats_url,
+        new_model=model_name,
+        new_score=new_score,
+        incumbent=incumbent,
+        skip=args.skip_promotion,
+    )
 
     return 0 if results["failed"] == 0 else 1
 
