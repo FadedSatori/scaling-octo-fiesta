@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import sys
 from pathlib import Path
 
 import httpx
+import nats
 
 from hermes.daemon.__main__ import load_config
 from hermes.daemon.installer import wait_for_daemon
@@ -58,18 +60,79 @@ async def run_eval(daemon_url: str, model: str | None) -> dict[str, object]:
     }
 
 
+def _load_incumbent(repo_root: Path) -> dict[str, object]:
+    """Load incumbent model score from eval_incumbent.json. Returns defaults if missing."""
+    incumbent_file = repo_root / "eval_incumbent.json"
+    if incumbent_file.exists():
+        try:
+            with incumbent_file.open("r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("failed to load incumbent: %s", exc)
+    return {"model": "none", "score": 0.0}
+
+
+def _save_incumbent(repo_root: Path, model: str, score: float) -> None:
+    """Save model and score as the new incumbent."""
+    incumbent_file = repo_root / "eval_incumbent.json"
+    try:
+        with incumbent_file.open("w", encoding="utf-8") as f:
+            json.dump({"model": model, "score": score}, f)
+        log.info("saved incumbent: model=%s score=%.1f%%", model, score * 100)
+    except Exception as exc:  # noqa: BLE001
+        log.error("failed to save incumbent: %s", exc)
+
+
+async def _publish_model_promoted(nats_url: str, model: str, score: float, improvement_pct: float) -> None:
+    """Publish hermes.events.model_promoted to NATS."""
+    try:
+        nc = await nats.connect(nats_url)
+        payload = json.dumps({
+            "model": model,
+            "score": score,
+            "improvement_pct": improvement_pct,
+        })
+        await nc.publish("hermes.events.model_promoted", payload.encode())
+        await nc.flush()
+        await nc.close()
+        log.info("published model_promoted: model=%s improvement=%.1f%%", model, improvement_pct)
+    except Exception as exc:  # noqa: BLE001
+        log.error("failed to publish model_promoted: %s", exc)
+
+
 async def main_async(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     base = f"http://127.0.0.1:{cfg.bind_port}"
     log.info("waiting for daemon at %s", base)
     await wait_for_daemon(base)
-    log.info("running eval (model=%s)", args.model or "default")
+
+    model_name = args.model or cfg.agent_model
+    log.info("running eval (model=%s)", model_name)
     results = await run_eval(base, args.model)
+    new_score = float(results["score"])
     log.info(
         "eval: %d/%d passed  score=%.1f%%",
-        results["passed"], results["total"], float(results["score"]) * 100,
+        results["passed"], results["total"], new_score * 100,
     )
-    # v0.2 TODO: compare score vs incumbent; publish hermes.events.model_promoted if +2%
+
+    repo_root = Path(cfg.repo_root)
+    incumbent = _load_incumbent(repo_root)
+    incumbent_score = float(incumbent.get("score", 0.0))
+
+    if incumbent_score > 0:
+        improvement_pct = (new_score - incumbent_score) / incumbent_score * 100
+        log.info("score vs incumbent (model=%s score=%.1f%%): improvement=%.1f%%",
+                 incumbent.get("model"), incumbent_score * 100, improvement_pct)
+        if improvement_pct >= 2.0 and not args.skip_promotion:
+            log.info("threshold met (+2.0%%) — promoting model")
+            await _publish_model_promoted(cfg.nats_url, model_name, new_score, improvement_pct)
+            _save_incumbent(repo_root, model_name, new_score)
+        elif improvement_pct >= 2.0 and args.skip_promotion:
+            log.info("threshold met (+2.0%%) but --skip-promotion set; not promoting")
+    else:
+        log.info("no incumbent found; initializing with current model")
+        _save_incumbent(repo_root, model_name, new_score)
+
     return 0 if results["failed"] == 0 else 1
 
 
@@ -83,6 +146,8 @@ def main() -> int:
     p.add_argument("--config", required=True, type=Path,
         help="Path to rendered daemon.yml")
     p.add_argument("--log-level", default="INFO")
+    p.add_argument("--skip-promotion", action="store_true",
+        help="Skip model promotion logic even if threshold is met")
     args = p.parse_args()
     logging.basicConfig(
         level=args.log_level,
